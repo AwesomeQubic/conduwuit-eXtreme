@@ -47,12 +47,12 @@ database_backend = "rocksdb"
 # Caddy or Nginx so all requests to /_matrix on port 443 and 8448 will be
 # forwarded to the conduwuit instance running on this port
 # Docker users: Don't change this, you'll need to map an external port to this.
-port = 6167
+port = 8008
 
 # default address (IPv4 or IPv6) conduwuit will listen on. Generally you want this to be
 # localhost (127.0.0.1 / ::1). If you are using Docker or a container NAT networking setup, you
 # likely need this to be 0.0.0.0.
-address = "127.0.0.1"
+address = "0.0.0.0"
 
 # How many requests conduwuit sends to other servers at the same time concurrently. Default is 500
 # Note that because conduwuit is very fast unlike other homeserver implementations, setting this too
@@ -166,7 +166,7 @@ url_preview_check_root_domain = false
 ### Misc
 
 # max log level for conduwuit. allows debug, info, warn, or error
-log = "debug"
+log = "warn"
 
 # controls whether encrypted rooms and events are allowed (default true)
 #allow_encryption = false
