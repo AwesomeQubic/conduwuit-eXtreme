@@ -215,19 +215,18 @@
           };
         };
 
-      createComplementImage = pkgs: base:
+      createComplementImage = pkgs: package:
         pkgs.dockerTools.buildImage {
-          name = "complement-conduit:dev";
+          name = "complement-conduit";
           tag = "dev";
 
-          fromImage = base;
-
           copyToRoot = pkgs.stdenv.mkDerivation {
+
             name = "complement_data";
             src = nix-filter {
               root = ./.;
               include = [
-                "complement/caddy.json"
+                "complement/federation.json"
                 "complement/conduwuit-complement.toml"
               ];
             };
@@ -235,7 +234,7 @@
             installPhase = ''
               mkdir -p $out
               cp $src/complement/conduwuit-complement.toml $out/conduit.toml
-              cp $src/complement/caddy.json $out/caddy.json
+              cp $src/complement/federation.json $out/federation.json
             '';
           };
 
@@ -244,12 +243,17 @@
             Cmd = [
                 "${pkgs.bash}/bin/sh"
                 "-c"
-                 ''${pkgs.lib.getExe pkgs.gnused} -i "s/#server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&''
-                 ''${pkgs.lib.getExe pkgs.gnused} -i "s/your.server.name/''${SERVER_NAME}/g" caddy.json &&''
-                 "${pkgs.lib.getExe pkgs.caddy} start --config caddy.json > /dev/null &&"
-            ] ++ base.buildArgs.config.Cmd;
+                ''${pkgs.lib.getExe pkgs.gnused} -i "s/#server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&
+                ${pkgs.lib.getExe pkgs.gnused} -i "s/your.server.name/''${SERVER_NAME}/g" federation.json &&
+                ${pkgs.lib.getExe pkgs.caddy} start --config federation.json > /dev/null &&
+                ${pkgs.lib.getExe package}
+                ''
+            ];
 
-            Volumes = { "/complement" = { }; };
+            Entrypoint = [
+              "${pkgs.lib.getExe' pkgs.tini "tini"}"
+              "--"
+            ];
 
             Env = [
               "SSL_CERT_FILE=/complement/ca/ca.crt"
@@ -303,7 +307,7 @@
               mv public $out
             '';
           };
-        complement-image = createComplementImage pkgsHost self.packages.${system}.oci-image;
+        complement-image = createComplementImage pkgsHost self.packages.${system}.default;
       }
       //
       builtins.listToAttrs
