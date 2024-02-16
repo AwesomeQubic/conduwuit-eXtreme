@@ -13,12 +13,16 @@ RESULTS_FILE="$3"
 
 OCI_IMAGE="complement-conduit:dev"
 
-env \
-    -C "$(git rev-parse --show-toplevel)" \
-    docker build \
-        --tag "$OCI_IMAGE" \
-        --file tests/complement/Dockerfile \
-        .
+#env \
+#    -C "$(git rev-parse --show-toplevel)" \
+#    docker build \
+#        --tag "$OCI_IMAGE" \
+#        --file complement/Dockerfile \
+#        .
+
+nix build .#complement-image
+docker load < result
+
 
 # It's okay (likely, even) that `go test` exits nonzero
 set +o pipefail

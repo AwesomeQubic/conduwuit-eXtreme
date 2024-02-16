@@ -214,6 +214,57 @@
             ];
           };
         };
+
+      createComplementImage = pkgs: base:
+        pkgs.dockerTools.buildImage {
+          name = "complement-conduit:dev";
+          tag = "dev";
+
+          fromImage = base;
+
+          copyToRoot = pkgs.stdenv.mkDerivation {
+            name = "complement_data";
+            src = nix-filter {
+              root = ./.;
+              include = [
+                "complement/caddy.json"
+                "complement/conduwuit-complement.toml"
+              ];
+            };
+            phases = [ "unpackPhase" "installPhase" ];
+            installPhase = ''
+              mkdir -p $out
+              cp $src/complement/conduwuit-complement.toml $out/conduit.toml
+              cp $src/complement/caddy.json $out/caddy.json
+            '';
+          };
+
+          config = {
+
+            Cmd = [
+                "${pkgs.bash}/bin/sh"
+                "-c"
+                 ''${pkgs.lib.getExe pkgs.gnused} -i "s/#server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&''
+                 ''${pkgs.lib.getExe pkgs.gnused} -i "s/your.server.name/''${SERVER_NAME}/g" caddy.json &&''
+                 "${pkgs.lib.getExe pkgs.caddy} start --config caddy.json > /dev/null &&"
+            ] ++ base.buildArgs.config.Cmd;
+
+            Volumes = { "/complement" = { }; };
+
+            Env = [
+              "SSL_CERT_FILE=/complement/ca/ca.crt"
+              "SERVER_NAME=localhost"
+              "CONDUIT_CONFIG=/conduit.toml"
+            ];
+
+            ExposedPorts = {
+              "8008/tcp" = {};
+              "8448/tcp" = {};
+            };
+
+          };
+
+        };
     in
     {
       packages = {
@@ -252,6 +303,7 @@
               mv public $out
             '';
           };
+        complement-image = createComplementImage pkgsHost self.packages.${system}.oci-image;
       }
       //
       builtins.listToAttrs
