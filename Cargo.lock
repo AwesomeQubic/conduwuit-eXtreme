@@ -522,7 +522,8 @@ dependencies = [
  "tracing-flame",
  "tracing-opentelemetry",
  "tracing-subscriber",
- "url",
+ "trust-dns-resolver",
+ "urlencoding",
  "webpage",
 ]
 
