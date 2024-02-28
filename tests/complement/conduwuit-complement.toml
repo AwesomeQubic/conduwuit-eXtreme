@@ -19,7 +19,7 @@
 # for more information
 
 # YOU NEED TO EDIT THIS
-#server_name = "your.server.name"
+server_name = "your.server.name"
 
 # Servers listed here will be used to gather public keys of other servers.
 # Generally, copying this exactly should be enough. (Currently, conduwuit doesn't
@@ -47,7 +47,7 @@ database_backend = "rocksdb"
 # Caddy or Nginx so all requests to /_matrix on port 443 and 8448 will be
 # forwarded to the conduwuit instance running on this port
 # Docker users: Don't change this, you'll need to map an external port to this.
-port = 8008
+port = [8448, 8008]
 
 # default address (IPv4 or IPv6) conduwuit will listen on. Generally you want this to be
 # localhost (127.0.0.1 / ::1). If you are using Docker or a container NAT networking setup, you
@@ -166,7 +166,7 @@ url_preview_check_root_domain = false
 ### Misc
 
 # max log level for conduwuit. allows debug, info, warn, or error
-log = "warn"
+log = "debug"
 
 # controls whether encrypted rooms and events are allowed (default true)
 #allow_encryption = false
@@ -248,3 +248,8 @@ allow_outgoing_presence = true
 
 # Config option to control how many seconds before presence updates that you are offline. Defaults to 30 minutes.
 #presence_offline_timeout_s = 1800
+
+[global.tls]
+certs = "/complement/ca/ca.crt"
+key = "/complement/ca/ca.key"
+dual_protocol = true

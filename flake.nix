@@ -215,8 +215,30 @@
           };
         };
 
-      createComplementImage = pkgs: package:
-        pkgs.dockerTools.buildImage {
+      createComplementImage = pkgs: package: let
+
+        conduwuit = builder pkgs {
+                  src = nix-filter {
+                    root = ./.;
+                    include = [
+                      "src"
+                      "Cargo.toml"
+                      "Cargo.lock"
+                    ];
+                  };
+
+                  cargoExtraArgs = "--features=axum_dual_protocol";
+
+                  # This is redundant with CI
+                  doCheck = false;
+
+                  env = env pkgs;
+                  nativeBuildInputs = nativeBuildInputs pkgs;
+
+                  meta.mainProgram = cargoToml.package.name;
+                };
+
+        in pkgs.dockerTools.buildImage {
           name = "complement-conduit";
           tag = "dev";
 
@@ -226,7 +248,6 @@
             src = nix-filter {
               root = ./.;
               include = [
-                "complement/federation.json"
                 "complement/conduwuit-complement.toml"
               ];
             };
@@ -234,7 +255,6 @@
             installPhase = ''
               mkdir -p $out
               cp $src/complement/conduwuit-complement.toml $out/conduit.toml
-              cp $src/complement/federation.json $out/federation.json
             '';
           };
 
@@ -243,10 +263,8 @@
             Cmd = [
                 "${pkgs.bash}/bin/sh"
                 "-c"
-                ''${pkgs.lib.getExe pkgs.gnused} -i "s/#server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&
-                ${pkgs.lib.getExe pkgs.gnused} -i "s/your.server.name/''${SERVER_NAME}/g" federation.json &&
-                ${pkgs.lib.getExe pkgs.caddy} start --config federation.json > /dev/null &&
-                ${pkgs.lib.getExe package}
+                ''${pkgs.lib.getExe pkgs.gnused} -i "s/server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&
+                ${pkgs.lib.getExe conduwuit}
                 ''
             ];
 
@@ -256,7 +274,6 @@
             ];
 
             Env = [
-              "SSL_CERT_FILE=/complement/ca/ca.crt"
               "SERVER_NAME=localhost"
               "CONDUIT_CONFIG=/conduit.toml"
             ];
