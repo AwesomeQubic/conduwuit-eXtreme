@@ -233,6 +233,15 @@
           ${pkgs.lib.getExe pkgs.docker} load < ${image}
           set +o pipefail
           ${pkgs.coreutils}/bin/env -C "${complement}" COMPLEMENT_BASE_IMAGE="complement-conduit:dev" ${pkgs.lib.getExe pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1
+          set -o pipefail
+          
+          # Post-process the results into an easy-to-compare format
+          ${pkgs.coreutils}/bin/cat "$1" | ${pkgs.lib.getExe pkgs.jq} -c '
+          select(
+            (.Action == "pass" or .Action == "fail" or .Action == "skip")
+            and .Test != null
+          ) | {Action: .Action, Test: .Test}
+          ' | ${pkgs.coreutils}/bin/sort > "$2"
           '';
 
       in script;
