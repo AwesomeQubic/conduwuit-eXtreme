@@ -229,6 +229,7 @@
 
         script = pkgs.writeShellScriptBin "run.sh"
           ''
+          export PATH=${pkgs.lib.makeBinPath [ pkgs.olm ]}
           ${pkgs.lib.getExe pkgs.docker} load < ${image}
           set +o pipefail
           env -C "${complement}" COMPLEMENT_BASE_IMAGE="complement-conduit:dev" ${pkgs.lib.getExe pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1
