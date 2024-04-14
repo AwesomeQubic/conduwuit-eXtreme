@@ -229,10 +229,10 @@
 
         script = pkgs.writeShellScriptBin "run.sh"
           ''
-          export PATH=${pkgs.lib.makeBinPath [ pkgs.olm ]}
+          export PATH=${pkgs.lib.makeBinPath [ pkgs.olm pkgs.gcc ]}
           ${pkgs.lib.getExe pkgs.docker} load < ${image}
           set +o pipefail
-          env -C "${complement}" COMPLEMENT_BASE_IMAGE="complement-conduit:dev" ${pkgs.lib.getExe pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1
+          ${pkgs.coreutils}/bin/env -C "${complement}" COMPLEMENT_BASE_IMAGE="complement-conduit:dev" ${pkgs.lib.getExe pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1
           '';
 
       in script;
@@ -303,12 +303,12 @@
     in
     {
       packages = {
-        default = mkPackage pkgsHost null;
+        default = mkPackage pkgsHost null "" "release";
         jemalloc = mkPackage pkgsHost "jemalloc" "" "release";
         hmalloc = mkPackage pkgsHost "hmalloc" "" "release";
         oci-image = mkOciImage pkgsHost self.packages.${system}.default null;
-        oci-image-jemalloc = mkOciImage pkgsHost self.packages.${system}.default "jemalloc" "" "release";
-        oci-image-hmalloc = mkOciImage pkgsHost self.packages.${system}.default "hmalloc" "" "release";
+        oci-image-jemalloc = mkOciImage pkgsHost self.packages.${system}.default "jemalloc";
+        oci-image-hmalloc = mkOciImage pkgsHost self.packages.${system}.default "hmalloc";
 
         book =
           let
@@ -338,7 +338,7 @@
               mv public $out
             '';
           };
-        complement-image = createComplementImage pkgsHost "jemalloc" "" "debug";
+        complement-image = createComplementImage pkgsHost;
         complement-runtime = createComplementRuntime pkgsHost self.outputs.packages.x86_64-linux.complement-image;
       }
       //
@@ -366,13 +366,13 @@
                 # An output for a statically-linked binary with jemalloc
                 {
                   name = "${binaryName}-jemalloc";
-                  value = mkPackage pkgsCrossStatic "jemalloc";
+                  value = mkPackage pkgsCrossStatic "jemalloc" "" "release";
                 }
 
                 # An output for a statically-linked binary with hardened_malloc
                 {
                   name = "${binaryName}-hmalloc";
-                  value = mkPackage pkgsCrossStatic "hmalloc";
+                  value = mkPackage pkgsCrossStatic "hmalloc" "" "release";
                 }
 
                 # An output for an OCI image based on that binary
