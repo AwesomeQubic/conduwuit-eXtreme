@@ -167,7 +167,7 @@
         )
       );
 
-      mkPackage = pkgs: allocator: builder pkgs {
+      mkPackage = pkgs: allocator: cargoArgs: profile: builder pkgs {
         src = nix-filter {
           root = ./.;
           include = [
@@ -190,7 +190,11 @@
         env = env pkgs;
         nativeBuildInputs = nativeBuildInputs pkgs;
 
+        cargoExtraArgs = cargoArgs;
+
         meta.mainProgram = cargoToml.package.name;
+
+        CARGO_PROFILE = profile;
       };
 
       mkOciImage = pkgs: package: allocator:
@@ -215,28 +219,27 @@
           };
         };
 
-      createComplementImage = pkgs: package: let
+      createComplementRuntime = pkgs: image: let
+        complement = pkgs.fetchFromGitHub {
+          owner = "matrix-org";
+          repo = "complement";
+          rev = "e323c79b0129c21e9a4f9f1e04f76a498585268a";
+          hash = "sha256-MjmGfAlZ5WC2+hFH6nEUprqBjO8xiTQh2HJIqQ5mIg8=";
+        };
 
-        conduwuit = builder pkgs {
-                  src = nix-filter {
-                    root = ./.;
-                    include = [
-                      "src"
-                      "Cargo.toml"
-                      "Cargo.lock"
-                    ];
-                  };
+        script = pkgs.writeShellScriptBin
+          "docker load < ${image}" "set +o pipefail"
+          "COMPLEMENT_BASE_IMAGE=\"complement-conduit:dev\" ${pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1";
 
-                  cargoExtraArgs = "--features=axum_dual_protocol";
+      in pkgs.stdenv.mkDerivation {
+        name = "complement-runtime";
+        buildInputs = [ complement image pkgs.jq pkgs.olm ];
 
-                  # This is redundant with CI
-                  doCheck = false;
+      };
 
-                  env = env pkgs;
-                  nativeBuildInputs = nativeBuildInputs pkgs;
+      createComplementImage = pkgs: let
 
-                  meta.mainProgram = cargoToml.package.name;
-                };
+        conduwuit = mkPackage pkgs "jemalloc" "--features=axum_dual_protocol" "dev";
 
         in pkgs.dockerTools.buildImage {
           name = "complement-conduit";
@@ -248,14 +251,17 @@
             src = nix-filter {
               root = ./.;
               include = [
-                "complement/conduwuit-complement.toml"
+                "tests/complement/conduwuit-complement.toml"
+                "tests/complement/v3.ext"
               ];
             };
             phases = [ "unpackPhase" "installPhase" ];
             installPhase = ''
-              mkdir -p $out
-              cp $src/complement/conduwuit-complement.toml $out/conduit.toml
+              mkdir -p $out/conduwuit/data
+              cp $src/tests/complement/conduwuit-complement.toml $out/conduwuit/conduit.toml
+              cp $src/tests/complement/v3.ext $out/v3.ext
             '';
+
           };
 
           config = {
@@ -263,7 +269,14 @@
             Cmd = [
                 "${pkgs.bash}/bin/sh"
                 "-c"
-                ''${pkgs.lib.getExe pkgs.gnused} -i "s/server_name = \"your.server.name\"/server_name = \"''${SERVER_NAME}\"/g" conduit.toml &&
+                ''
+                echo "Starting server as $SERVER_NAME" &&
+                export CONDUIT_SERVER_NAME=$SERVER_NAME CONDUIT_WELL_KNOWN_SERVER="$SERVER_NAME:8448" CONDUIT_WELL_KNOWN_SERVER="$SERVER_NAME:8008" &&
+                ${pkgs.lib.getExe pkgs.openssl} genrsa -out /conduwuit/private_key.key 2048 &&
+                ${pkgs.lib.getExe pkgs.openssl} req -new -sha256 -key /conduwuit/private_key.key -subj "/C=US/ST=CA/O=MyOrg, Inc./CN=$SERVER_NAME" -out /conduwuit/signing_request.csr &&
+                echo "DNS.1 = $SERVER_NAME" >> /v3.ext &&
+                echo "IP.1 = $(${pkgs.lib.getExe pkgs.gawk} 'END{print $1}' /etc/hosts)" >> /v3.ext &&
+                ${pkgs.lib.getExe pkgs.openssl} x509 -req -extfile /v3.ext -in /conduwuit/signing_request.csr -CA /complement/ca/ca.crt -CAkey /complement/ca/ca.key -CAcreateserial -out /conduwuit/certificate.crt -days 1 -sha256 &&
                 ${pkgs.lib.getExe conduwuit}
                 ''
             ];
@@ -274,8 +287,9 @@
             ];
 
             Env = [
+              "SSL_CERT_FILE=/complement/ca/ca.crt"
               "SERVER_NAME=localhost"
-              "CONDUIT_CONFIG=/conduit.toml"
+              "CONDUIT_CONFIG=/conduwuit/conduit.toml"
             ];
 
             ExposedPorts = {
@@ -290,11 +304,11 @@
     {
       packages = {
         default = mkPackage pkgsHost null;
-        jemalloc = mkPackage pkgsHost "jemalloc";
-        hmalloc = mkPackage pkgsHost "hmalloc";
+        jemalloc = mkPackage pkgsHost "jemalloc" "" "release";
+        hmalloc = mkPackage pkgsHost "hmalloc" "" "release";
         oci-image = mkOciImage pkgsHost self.packages.${system}.default null;
-        oci-image-jemalloc = mkOciImage pkgsHost self.packages.${system}.default "jemalloc";
-        oci-image-hmalloc = mkOciImage pkgsHost self.packages.${system}.default "hmalloc";
+        oci-image-jemalloc = mkOciImage pkgsHost self.packages.${system}.default "jemalloc" "" "release";
+        oci-image-hmalloc = mkOciImage pkgsHost self.packages.${system}.default "hmalloc" "" "release";
 
         book =
           let
@@ -324,7 +338,8 @@
               mv public $out
             '';
           };
-        complement-image = createComplementImage pkgsHost self.packages.${system}.default;
+        complement-image = createComplementImage pkgsHost "jemalloc" "" "debug";
+        complement-runtime = createComplementRuntime pkgsHost self.outputs.packages.x86_64-linux.complement-image;
       }
       //
       builtins.listToAttrs
@@ -345,7 +360,7 @@
                 # An output for a statically-linked binary
                 {
                   name = binaryName;
-                  value = mkPackage pkgsCrossStatic null;
+                  value = mkPackage pkgsCrossStatic null "" "release";
                 }
 
                 # An output for a statically-linked binary with jemalloc
