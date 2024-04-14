@@ -224,18 +224,17 @@
           owner = "matrix-org";
           repo = "complement";
           rev = "e323c79b0129c21e9a4f9f1e04f76a498585268a";
-          hash = "sha256-MjmGfAlZ5WC2+hFH6nEUprqBjO8xiTQh2HJIqQ5mIg8=";
+          hash = "sha256-bQPRjoHYSEY2o5/ncc2yjXBIypChXPh+OwtpUOdlaCU=";
         };
 
-        script = pkgs.writeShellScriptBin
-          "docker load < ${image}" "set +o pipefail"
-          "COMPLEMENT_BASE_IMAGE=\"complement-conduit:dev\" ${pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1";
+        script = pkgs.writeShellScriptBin "run.sh"
+          ''
+          ${pkgs.lib.getExe pkgs.docker} load < ${image}
+          set +o pipefail
+          env -C "${complement}" COMPLEMENT_BASE_IMAGE="complement-conduit:dev" ${pkgs.lib.getExe pkgs.go} test -json ${complement}/tests | ${pkgs.toybox}/bin/tee $1
+          '';
 
-      in pkgs.stdenv.mkDerivation {
-        name = "complement-runtime";
-        buildInputs = [ complement image pkgs.jq pkgs.olm ];
-
-      };
+      in script;
 
       createComplementImage = pkgs: let
 
